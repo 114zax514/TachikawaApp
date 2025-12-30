@@ -253,14 +253,14 @@ def main():
             
             st.markdown("---")
             st.write("📍 **位置情報**")
+            st.caption("住所を入れると自動検索します。確実に入れたい場合はGoogleマップの座標を貼り付けてください。")
             
+            # 住所入力と座標入力を並べる
             address = st.text_input("住所 (またはキーワード)", placeholder="例: 立川市曙町2-1-1")
-
-            with st.expander("詳細設定（緯度経度手動）"):
-                col_lat, col_lon = st.columns(2)
-                with col_lat: lat_input = st.text_input("緯度")
-                with col_lon: lon_input = st.text_input("経度")
             
+            # Googleマップからコピーした形式（緯度, 経度）をそのまま受け付ける入力欄
+            latlon_input = st.text_input("座標 (Googleマップからコピー)", placeholder="例: 35.696941, 139.415026", help="Googleマップで地点を右クリックすると、緯度と経度がコピーできます。そのまま貼り付けてください。")
+
             submitted = st.form_submit_button("登録する", use_container_width=True)
             
             if submitted:
@@ -269,11 +269,25 @@ def main():
                 else:
                     try:
                         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-                        lat_val = lat_input
-                        lon_val = lon_input
+                        lat_val = ""
+                        lon_val = ""
                         
-                        # 住所から緯度経度検索（改良版）
-                        if GEOPY_AVAILABLE and not lat_val and address:
+                        # 1. まず座標入力欄の値を解析する
+                        if latlon_input:
+                            try:
+                                # 全角カンマやスペースを正規化して分割
+                                normalized_input = latlon_input.replace("，", ",").replace(" ", "")
+                                parts = normalized_input.split(",")
+                                if len(parts) == 2:
+                                    lat_val = float(parts[0])
+                                    lon_val = float(parts[1])
+                                else:
+                                    st.warning("⚠️ 座標の形式が正しくありません。「緯度, 経度」の形式（例: 35.xxxx, 139.xxxx）で入力してください。")
+                            except ValueError:
+                                st.warning("⚠️ 座標には数値を入力してください。")
+
+                        # 2. 座標が指定されていなければ、住所から自動検索を行う
+                        if GEOPY_AVAILABLE and (not lat_val or not lon_val) and address:
                             with st.spinner(f"「{address}」を検索中..."):
                                 try:
                                     geolocator = Nominatim(user_agent="tachikawa_app")
@@ -283,7 +297,6 @@ def main():
                                     
                                     # 2回目：見つからない場合、「東京都立川市」を付与して再検索
                                     if not loc:
-                                         # すでに含まれている場合は重複しないように
                                         search_word = address
                                         if "立川" not in search_word:
                                             search_word = "東京都立川市 " + search_word
@@ -296,23 +309,14 @@ def main():
                                     if loc:
                                         lat_val = loc.latitude
                                         lon_val = loc.longitude
-                                        st.success(f"📍 位置が見つかりました: {loc.address}")
+                                        st.success(f"📍 住所から位置が見つかりました: {loc.address}")
                                         time.sleep(1)
                                     else:
-                                        st.warning("⚠️ 位置情報が見つかりませんでした。住所が正しいか確認するか、'立川駅'のようなランドマークを入力してみてください。")
+                                        st.warning("⚠️ 位置情報が見つかりませんでした。住所のみ登録します。")
                                 except Exception as geo_err:
                                     st.error(f"位置検索エラー: {geo_err}")
 
-                        # None対策
-                        lat_val = lat_val if lat_val else ""
-                        lon_val = lon_val if lon_val else ""
-                        
                         # マスタの列順に合わせて追加
-                        new_row = [name, genre, area, rating, comment, address, timestamp, lat_val, lon_val]
-                        # カラム順序の不整合を防ぐため、新規登録時はdfのカラム定義を見るのがベストだが、
-                        # ここでは expected_columns に合わせる
-                        # ["店名", "ジャンル", "エリア", "評価", "メモ", "住所", "登録日", "緯度", "経度"]
-                        
                         new_row_ordered = [
                             name, genre, area, rating, comment, address, timestamp, lat_val, lon_val
                         ]
